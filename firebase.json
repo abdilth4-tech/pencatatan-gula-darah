@@ -9,7 +9,10 @@
       ".firebaserc",
       "firestore.rules",
       "**/.*",
-      "**/node_modules/**"
+      "**/.*/**",
+      "**/node_modules/**",
+      ".gitignore",
+      "supabase-key.example.js"
     ],
     "headers": [
       {
