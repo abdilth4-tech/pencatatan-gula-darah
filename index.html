@@ -1284,7 +1284,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getFirestore, collection, addDoc, deleteDoc, doc, getDoc, setDoc, updateDoc,
+    getFirestore, collection, addDoc, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc,
     query, where, orderBy, limit, onSnapshot, serverTimestamp, increment
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import {
@@ -2154,6 +2154,21 @@
     }).catch(() => {});
   }
 
+  // Hapus diskusi beserta seluruh balasannya (dan foto-fotonya di Supabase).
+  // Firestore tidak menghapus subkoleksi otomatis, jadi balasan dihapus satu
+  // per satu dulu — best-effort — sebelum pesan utamanya.
+  async function deleteThread(m) {
+    try {
+      const snap = await getDocs(collection(db, "forum", m.id, "replies"));
+      await Promise.all(snap.docs.map((d) => {
+        deleteForumImage(d.data().imageUrl);
+        return deleteDoc(d.ref).catch(() => {});
+      }));
+    } catch (_) { /* balasan yatim tidak menghalangi penghapusan diskusi */ }
+    await deleteDoc(doc(db, "forum", m.id));
+    deleteForumImage(m.imageUrl);
+  }
+
   // ---------- Lightbox foto ----------
   function openLightbox(src) {
     $("lightboxImg").src = src;
@@ -2325,8 +2340,7 @@
           });
           if (!ok) return;
           try {
-            await deleteDoc(doc(db, "forum", m.id));
-            deleteForumImage(m.imageUrl);
+            await deleteThread(m);
             toast("Diskusi dihapus");
           } catch (err) {
             toast("Gagal menghapus: " + err.message);
@@ -2353,9 +2367,7 @@
         });
         if (!ok) return;
         try {
-          const delImg = viewedThread.imageUrl;
-          await deleteDoc(doc(db, "forum", viewedThread.id));
-          deleteForumImage(delImg);
+          await deleteThread(viewedThread);
           toast("Diskusi dihapus");
           closeThread();
         } catch (err) {

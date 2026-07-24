@@ -63,7 +63,9 @@ service cloud.firestore {
     // Forum diskusi (model thread) — dokter & pasien, dipantau admin:
     // - baca & buat diskusi/balasan: dokter, pasien, dan admin ('pending' tidak bisa)
     // - pesan boleh berisi teks, foto (imageUrl → Supabase Storage), atau keduanya
-    // - hapus: penulisnya sendiri, atau admin (moderasi)
+    // - hapus diskusi: penulisnya sendiri, atau admin (take-down/moderasi)
+    // - hapus balasan: penulis balasan, pemilik diskusinya (agar balasan ikut
+    //   terhapus saat diskusinya dihapus), atau admin
     // - isi pesan tidak bisa diedit; satu-satunya update yang diizinkan adalah
     //   penghitung balasan (replyCount) oleh peserta forum
     function validForumBody() {
@@ -91,7 +93,8 @@ service cloud.firestore {
           && validForumBody();
         allow update: if false;
         allow delete: if isAdmin()
-          || (signedIn() && resource.data.authorUid == request.auth.uid);
+          || (signedIn() && resource.data.authorUid == request.auth.uid)
+          || (signedIn() && get(/databases/$(database)/documents/forum/$(postId)).data.authorUid == request.auth.uid);
       }
     }
 
