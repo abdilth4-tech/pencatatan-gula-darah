@@ -420,9 +420,16 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .forum-msg .head .when { font-size: 0.68rem; color: var(--faint); white-space: nowrap; }
-  .forum-msg .head .del { margin-left: auto; opacity: 0; transition: opacity 0.15s; }
-  .forum-msg:hover .head .del { opacity: 1; }
-  @media (hover: none) { .forum-msg .head .del { opacity: 1; } }
+  /* Hapus dengan tahan (long-press): hanya kartu milik sendiri / admin */
+  .forum-msg.holdable {
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    transition: border-color 0.15s, transform 0.12s, box-shadow 0.12s;
+  }
+  .forum-msg.holding {
+    transform: scale(0.97);
+    border-color: var(--dot-vhigh);
+    box-shadow: 0 0 0 3px rgba(200,60,60,0.12);
+  }
   .forum-msg .body {
     font-size: 0.84rem; line-height: 1.65; color: var(--ink-soft);
     white-space: pre-wrap; word-break: break-word;
@@ -520,6 +527,11 @@
     align-items: center;
     justify-content: space-between;
     margin: 26px 2px 12px;
+  }
+  .section-hint {
+    font-size: 0.68rem;
+    color: var(--faint);
+    margin: -8px 2px 12px;
   }
   .section-head .section-title { margin: 0; }
   button.export {
@@ -1136,6 +1148,7 @@
     </div>
 
     <div class="section-title">Diskusi Terbaru</div>
+    <div class="section-hint">Tahan (tekan lama) pesan milikmu untuk menghapusnya.</div>
     <div id="forumList" class="forum-feed"><div class="loading">Memuat data…</div></div>
 
   </div><!-- /forumScreen -->
@@ -1148,6 +1161,7 @@
     <div id="threadRoot" class="forum-feed" style="margin-bottom:4px;"></div>
 
     <div class="section-title">Balasan</div>
+    <div class="section-hint">Tahan (tekan lama) pesan milikmu untuk menghapusnya.</div>
     <div id="replyList" class="forum-feed"><div class="loading">Memuat balasan…</div></div>
 
     <div class="card" style="margin-top:14px;">
@@ -2208,6 +2222,42 @@
     return api;
   }
 
+  // Hapus dengan tahan (long-press) — dipasang hanya pada pesan yang boleh
+  // dihapus (milik sendiri atau admin). Tahan ±0,5 detik memunculkan
+  // konfirmasi hapus; bergeser (scroll) atau melepas lebih cepat membatalkan.
+  function attachLongPress(el, onHold) {
+    let timer = null, held = false, x0 = 0, y0 = 0;
+    el.classList.add("holdable");
+    el.title = "Tahan untuk menghapus";
+    const cancel = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      el.classList.remove("holding");
+    };
+    el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.target.closest("button, a, .quote, .m-photo")) return;
+      held = false; x0 = e.clientX; y0 = e.clientY;
+      el.classList.add("holding");
+      timer = setTimeout(() => {
+        timer = null; held = true;
+        el.classList.remove("holding");
+        if (navigator.vibrate) navigator.vibrate(30);
+        onHold();
+      }, 550);
+    });
+    el.addEventListener("pointermove", (e) => {
+      if (timer && (Math.abs(e.clientX - x0) > 12 || Math.abs(e.clientY - y0) > 12)) cancel();
+    });
+    el.addEventListener("pointerup", cancel);
+    el.addEventListener("pointercancel", cancel);
+    el.addEventListener("pointerleave", cancel);
+    // Setelah tahan berhasil, jangan teruskan klik (mis. membuka thread)
+    el.addEventListener("click", (e) => {
+      if (held) { e.preventDefault(); e.stopPropagation(); held = false; }
+    }, true);
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
   // Kartu pesan — dipakai untuk daftar thread, pesan awal, dan balasan
   function msgEl(m, opts = {}) {
     const div = document.createElement("div");
@@ -2245,7 +2295,6 @@
           <span class="who">${esc(m.authorName || "Pengguna")}</span>
           <span class="role-chip sm ${chipCls}">${chipLabel}</span>
           <span class="when" title="${d ? esc(`${fmtTanggal(d)}, ${fmtJam(d)}`) : ""}">· ${d ? relTime(d) : "baru saja"}</span>
-          ${canDel ? '<button class="del" title="Hapus">&times;</button>' : ""}
         </div>
         ${quote}
         <div class="body">${esc(m.text || "")}</div>
@@ -2326,12 +2375,9 @@
     wrap.innerHTML = "";
     for (const m of forumMsgs) {
       const { div, canDel } = msgEl(m, { thread: true });
-      div.onclick = (e) => {
-        if (e.target.closest(".del")) return;
-        openThread(m);
-      };
+      div.onclick = () => openThread(m);
       if (canDel) {
-        div.querySelector(".del").onclick = async () => {
+        attachLongPress(div, async () => {
           const ok = await showConfirm({
             title: "Hapus Diskusi",
             message: "Diskusi ini beserta seluruh balasannya akan dihapus permanen dari forum.",
@@ -2345,7 +2391,7 @@
           } catch (err) {
             toast("Gagal menghapus: " + err.message);
           }
-        };
+        });
       }
       wrap.appendChild(div);
     }
@@ -2358,7 +2404,7 @@
     wrap.innerHTML = "";
     const { div, canDel } = msgEl(viewedThread);
     if (canDel) {
-      div.querySelector(".del").onclick = async () => {
+      attachLongPress(div, async () => {
         const ok = await showConfirm({
           title: "Hapus Diskusi",
           message: "Diskusi ini beserta seluruh balasannya akan dihapus permanen dari forum.",
@@ -2373,7 +2419,7 @@
         } catch (err) {
           toast("Gagal menghapus: " + err.message);
         }
-      };
+      });
     }
     wrap.appendChild(div);
   }
@@ -2417,7 +2463,7 @@
         setTimeout(() => asal.classList.remove("flash"), 1400);
       };
       if (canDel) {
-        div.querySelector(".del").onclick = async () => {
+        attachLongPress(div, async () => {
           const ok = await showConfirm({
             title: "Hapus Balasan",
             message: "Balasan ini akan dihapus permanen.",
@@ -2435,7 +2481,7 @@
           } catch (err) {
             toast("Gagal menghapus: " + err.message);
           }
-        };
+        });
       }
       wrap.appendChild(div);
     }
