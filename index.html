@@ -208,6 +208,16 @@
   .patient-row { cursor: pointer; transition: background 0.15s; }
   .patient-row:hover { background: var(--bg); }
 
+  /* Data akun (isian Pengaturan Profil) di layar detail */
+  .acct-data {
+    display: grid; grid-template-columns: auto 1fr; gap: 5px 16px;
+    font-size: 0.76rem; line-height: 1.5; color: var(--ink-soft);
+    margin: -10px 0 16px;
+  }
+  .acct-data .k { color: var(--faint); font-weight: 600; white-space: nowrap; }
+  .acct-data .v { word-break: break-word; }
+  .acct-data .v.kosong { color: var(--faint); font-style: italic; }
+
   select.mini {
     -webkit-appearance: none;
     -moz-appearance: none;
@@ -1064,7 +1074,7 @@
         <span class="date-note" id="pEmail"></span>
       </div>
       <div id="pName" style="font-size:1.05rem; font-weight:700; letter-spacing:-0.01em; margin-bottom:16px;"></div>
-      <div id="pMeta" style="display:none; font-size:0.76rem; color:var(--muted); line-height:1.6; margin:-10px 0 16px;"></div>
+      <div id="pAccount" class="acct-data"></div>
       <div class="status-row">
         <div class="status-box filled">
           <div class="label">Cek Terakhir</div>
@@ -2059,14 +2069,17 @@
     $("pName").textContent = p.name || p.email;
     $("pEmail").textContent = p.email;
     const umur = p.birthDate ? umurDari(p.birthDate) : null;
-    const meta = [
-      p.gender === "L" ? "Laki-laki" : p.gender === "P" ? "Perempuan" : null,
-      umur !== null ? `${umur} tahun` : null,
-      p.phone ? `Telp ${p.phone}` : null,
-      p.address || null
-    ].filter(Boolean).join("  ·  ");
-    $("pMeta").textContent = meta;
-    $("pMeta").style.display = meta ? "block" : "none";
+    const lahir = p.birthDate
+      ? `${fmtTanggalPendek(new Date(p.birthDate + "T00:00:00"))}${umur !== null ? ` (${umur} tahun)` : ""}`
+      : "";
+    const rows = [
+      ["Telepon", p.phone || ""],
+      ["Tgl. Lahir", lahir],
+      ["Kelamin", p.gender === "L" ? "Laki-laki" : p.gender === "P" ? "Perempuan" : ""],
+      ["Alamat", p.address || ""]
+    ];
+    $("pAccount").innerHTML = rows.map(([k, v]) =>
+      `<div class="k">${k}</div><div class="v${v ? "" : " kosong"}">${v ? esc(v) : "belum diisi"}</div>`).join("");
     $("pHistory").innerHTML = '<div class="loading">Memuat data…</div>';
     $("pChart").innerHTML = '<div class="loading">Memuat data…</div>';
     renderPatientStats();
