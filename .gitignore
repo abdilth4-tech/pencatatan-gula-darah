@@ -1,0 +1,8 @@
+# Kunci API Supabase — jangan pernah di-commit
+supabase-key.js
+
+# Cache Firebase CLI
+.firebase/
+
+# Konfigurasi lokal Claude Code
+.claude/

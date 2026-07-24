@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function userEmail() {
+      return request.auth.token.email.lower();
+    }
+    // PENTING: samakan daftar ini dengan ADMIN_EMAILS di index.html
+    function isAdmin() {
+      return signedIn() && userEmail() in ['abdilth4@gmail.com', 'thoh4444a@gmail.com'];
+    }
+    function myProfile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    }
+    function isDokter() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && myProfile().role == 'dokter';
+    }
+    function isPasien() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && myProfile().role == 'pasien';
+    }
+
+    // Profil akun — dibuat otomatis saat pertama kali login (role 'pending').
+    // - admin: baca semua & ubah peran/dokter siapa pun
+    // - pemilik: baca profilnya sendiri; hanya boleh memperbarui nama/foto,
+    //   TIDAK bisa mengubah role atau doctorUid miliknya sendiri
+    // - dokter: baca pasiennya sendiri dan akun yang belum punya dokter;
+    //   boleh mengklaim akun tanpa dokter sebagai pasiennya (role -> 'pasien',
+    //   doctorUid -> uid-nya sendiri) dan melepasnya kembali
+    // - semua yang login boleh membaca profil dokter (untuk menampilkan nama dokter)
+    match /profiles/{uid} {
+      allow read: if isAdmin()
+        || (signedIn() && request.auth.uid == uid)
+        || (isDokter() && (resource.data.get('doctorUid', '') == request.auth.uid
+                           || resource.data.get('doctorUid', '') == ''))
+        || (signedIn() && resource.data.role == 'dokter');
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.email == userEmail()
+        && request.resource.data.role == 'pending'
+        && request.resource.data.get('doctorUid', '') == '';
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.get('doctorUid', '') == resource.data.get('doctorUid', ''))
+        || (isDokter() && request.auth.uid != uid
+            && resource.data.role != 'dokter'
+            && (resource.data.get('doctorUid', '') == ''
+                || resource.data.get('doctorUid', '') == request.auth.uid)
+            && request.resource.data.role == 'pasien'
+            && (request.resource.data.get('doctorUid', '') == ''
+                || request.resource.data.get('doctorUid', '') == request.auth.uid)
+            && request.resource.data.email == resource.data.email);
+      allow delete: if isAdmin();
+    }
+
+    // Forum diskusi (model thread) — dokter & pasien, dipantau admin:
+    // - baca & buat diskusi/balasan: dokter, pasien, dan admin ('pending' tidak bisa)
+    // - pesan boleh berisi teks, foto (imageUrl → Supabase Storage), atau keduanya
+    // - hapus: penulisnya sendiri, atau admin (moderasi)
+    // - isi pesan tidak bisa diedit; satu-satunya update yang diizinkan adalah
+    //   penghitung balasan (replyCount) oleh peserta forum
+    function validForumBody() {
+      return request.resource.data.text is string
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.get('imageUrl', '') is string
+        && (request.resource.data.text.size() > 0
+            || request.resource.data.get('imageUrl', '') != '');
+    }
+    match /forum/{postId} {
+      allow read: if isAdmin() || isDokter() || isPasien();
+      allow create: if (isAdmin() || isDokter() || isPasien())
+        && request.resource.data.authorUid == request.auth.uid
+        && validForumBody();
+      allow update: if (isAdmin() || isDokter() || isPasien())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replyCount']);
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.authorUid == request.auth.uid);
+
+      // Balasan di dalam sebuah diskusi
+      match /replies/{replyId} {
+        allow read: if isAdmin() || isDokter() || isPasien();
+        allow create: if (isAdmin() || isDokter() || isPasien())
+          && request.resource.data.authorUid == request.auth.uid
+          && validForumBody();
+        allow update: if false;
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.authorUid == request.auth.uid);
+      }
+    }
+
+    // Catatan gula darah:
+    // - pemilik: baca & tulis penuh
+    // - dokter: hanya baca, dan hanya milik pasien yang ditugaskan padanya
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read: if isDokter()
+        && get(/databases/$(database)/documents/profiles/$(uid)).data.get('doctorUid', '') == request.auth.uid;
+    }
+  }
+}
