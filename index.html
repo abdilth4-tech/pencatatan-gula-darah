@@ -1060,7 +1060,7 @@
 
     <div class="card">
       <div class="card-label">
-        <span>Pasien</span>
+        <span id="pRoleLabel">Pasien</span>
         <span class="date-note" id="pEmail"></span>
       </div>
       <div id="pName" style="font-size:1.05rem; font-weight:700; letter-spacing:-0.01em; margin-bottom:16px;"></div>
@@ -1770,7 +1770,7 @@
     card.className = "list-card";
     for (const p of list) {
       const row = document.createElement("div");
-      row.className = "acct-row";
+      row.className = "acct-row patient-row";
       const dokterAssigned = dokters.find(d => d.id === p.doctorUid);
       row.innerHTML = `
         ${avatarImg(p)}
@@ -1778,9 +1778,10 @@
           <div class="n">${esc(p.name || p.email)}</div>
           <div class="e">${esc(p.email)}</div>
           ${p.role === "pasien"
-            ? `<div class="sub">Dokter: ${esc(dokterAssigned ? (dokterAssigned.name || dokterAssigned.email) : "belum dipilih")}</div>`
-            : (p.role === "pending" || !p.role) ? '<div class="sub">Baru masuk — belum diberi peran</div>' : ""}
+            ? `<div class="sub">Dokter: ${esc(dokterAssigned ? (dokterAssigned.name || dokterAssigned.email) : "belum dipilih")} · ketuk untuk lihat data</div>`
+            : (p.role === "pending" || !p.role) ? '<div class="sub">Baru masuk — belum diberi peran</div>' : '<div class="sub">Ketuk untuk lihat data</div>'}
         </div>
+        <span class="chev">&rsaquo;</span>
         <div class="controls">
           <select class="mini role-sel" title="Peran akun">
             <option value="pending">Belum diberi peran</option>
@@ -1793,6 +1794,13 @@
             ${dokters.map(d => `<option value="${esc(d.id)}">${esc(d.name || d.email)}</option>`).join("")}
           </select>` : ""}
         </div>`;
+
+      // Admin bisa membuka data akun mana pun (pasien maupun dokter);
+      // klik pada kontrol peran/dokter tidak ikut membuka detail
+      row.onclick = (e) => {
+        if (e.target.closest(".controls")) return;
+        openPatient(p);
+      };
 
       const roleSel = row.querySelector(".role-sel");
       roleSel.value = p.role || "pending";
@@ -2046,6 +2054,8 @@
     viewedPatient = p;
     patientEntries = [];
     showScreen("patientDetailScreen");
+    $("pRoleLabel").textContent = p.role === "dokter" ? "Dokter" : p.role === "pasien" ? "Pasien" : "Akun";
+    $("backBtn").innerHTML = currentRole === "admin" ? "&larr; Kelola Akun" : "&larr; Daftar Pasien";
     $("pName").textContent = p.name || p.email;
     $("pEmail").textContent = p.email;
     const umur = p.birthDate ? umurDari(p.birthDate) : null;
@@ -2082,7 +2092,7 @@
   $("backBtn").onclick = () => {
     if (patientUnsub) { patientUnsub(); patientUnsub = null; }
     viewedPatient = null;
-    showScreen("dokterScreen");
+    showScreen(currentRole === "admin" ? "adminScreen" : "dokterScreen");
   };
 
   // ============================================================

@@ -100,9 +100,11 @@ service cloud.firestore {
 
     // Catatan gula darah:
     // - pemilik: baca & tulis penuh
+    // - admin: baca semua akun (pasien maupun dokter)
     // - dokter: hanya baca, dan hanya milik pasien yang ditugaskan padanya
     match /users/{uid}/{document=**} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read: if isAdmin();
       allow read: if isDokter()
         && get(/databases/$(database)/documents/profiles/$(uid)).data.get('doctorUid', '') == request.auth.uid;
     }
