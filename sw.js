@@ -1,5 +1,5 @@
 // Service worker Glukosa — app shell cache + fallback offline
-const CACHE = "glukosa-v1";
+const CACHE = "glukosa-v2";
 const ASSETS = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -32,6 +32,20 @@ self.addEventListener("fetch", (e) => {
           return res;
         })
         .catch(() => caches.match("/"))
+    );
+    return;
+  }
+
+  // Kunci Supabase: utamakan jaringan agar pergantian kunci langsung terpakai
+  if (new URL(req.url).pathname === "/supabase-key.js") {
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req))
     );
     return;
   }
