@@ -134,7 +134,7 @@
 
   /* ---------- Form input ---------- */
   .input-row { display: flex; gap: 10px; }
-  input[type="number"] {
+  .glucose-btn {
     flex: 1;
     font-family: inherit;
     font-size: 1.4rem;
@@ -148,10 +148,11 @@
     text-align: center;
     color: var(--ink);
     background: var(--card);
+    cursor: pointer;
     transition: border-color 0.15s;
   }
-  input[type="number"]::placeholder { color: var(--faint); font-weight: 400; }
-  input[type="number"]:focus { border-color: var(--ink); }
+  .glucose-btn:hover, .glucose-btn:focus { border-color: var(--ink); }
+  .glucose-btn .ph { color: var(--faint); font-weight: 400; font-size: 1rem; }
   button.save {
     font-family: inherit;
     background: var(--accent);
@@ -969,6 +970,25 @@
   .dp-actions .dp-clear { flex: 1; background: none; border: none; color: var(--muted); }
   .dp-actions .dp-cancel { flex: 1; background: var(--bg); border: 1px solid var(--border-strong); color: var(--ink); }
   .dp-actions .dp-ok { flex: 1.3; background: var(--ink); border: none; color: #fff; }
+
+  /* Keypad angka kustom — pengganti keyboard numerik bawaan untuk input gula darah */
+  .kp-panel { max-width: 300px; }
+  .kp-display {
+    display: flex; align-items: baseline; justify-content: center; gap: 6px;
+    font-size: 2.1rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ink);
+    padding: 14px 0; margin-bottom: 4px; min-height: 1.4em;
+  }
+  .kp-display .empty { color: var(--faint); font-size: 1.05rem; font-weight: 400; }
+  .kp-display .unit { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+  .kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kp-grid button {
+    font-family: inherit; font-size: 1.15rem; font-weight: 600; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 15px 0; cursor: pointer; transition: background 0.12s;
+  }
+  .kp-grid button:hover { background: var(--border); }
+  .kp-grid button.kp-back { font-size: 1rem; color: var(--muted); }
+  .kp-grid button.kp-zero { grid-column: span 1; }
   button.save-profile {
     font-family: inherit;
     width: 100%;
@@ -1074,7 +1094,8 @@
     <div class="card">
       <div class="card-label"><span>Input Gula Darah</span></div>
       <div class="input-row">
-        <input type="number" id="glucose" inputmode="numeric" min="20" max="700" placeholder="110">
+        <input type="hidden" id="glucose">
+        <button type="button" class="glucose-btn" id="glucoseBtn"><span class="ph">Ketuk untuk isi nilai</span></button>
         <button class="save" id="saveBtn">Simpan</button>
       </div>
       <div class="unit-note">Satuan mg/dL</div>
@@ -1354,6 +1375,32 @@
       <button type="button" class="dp-clear" id="dpClear">Hapus</button>
       <button type="button" class="dp-cancel" id="dpCancel">Batal</button>
       <button type="button" class="dp-ok" id="dpOk">Pilih</button>
+    </div>
+  </div>
+</div>
+
+<!-- Keypad angka gula darah (pengganti keyboard numerik bawaan browser) -->
+<div id="kpOverlay" class="dp-overlay">
+  <div class="dp-panel kp-panel">
+    <div class="dp-title">Nilai Gula Darah</div>
+    <div class="kp-display" id="kpDisplay"></div>
+    <div class="kp-grid">
+      <button type="button" data-k="1">1</button>
+      <button type="button" data-k="2">2</button>
+      <button type="button" data-k="3">3</button>
+      <button type="button" data-k="4">4</button>
+      <button type="button" data-k="5">5</button>
+      <button type="button" data-k="6">6</button>
+      <button type="button" data-k="7">7</button>
+      <button type="button" data-k="8">8</button>
+      <button type="button" data-k="9">9</button>
+      <button type="button" class="kp-back" id="kpBack" title="Hapus satu angka">&larr;</button>
+      <button type="button" class="kp-zero" data-k="0">0</button>
+      <button type="button" id="kpClearKey" title="Kosongkan">C</button>
+    </div>
+    <div class="dp-actions">
+      <button type="button" class="dp-cancel" id="kpCancel">Batal</button>
+      <button type="button" class="dp-ok" id="kpOk">Pilih</button>
     </div>
   </div>
 </div>
@@ -1653,7 +1700,7 @@
     const v = parseInt(input.value, 10);
     if (!v || v < 20 || v > 700) {
       toast("Masukkan nilai gula darah yang valid (20–700 mg/dL)");
-      input.focus();
+      openKeypad();
       return;
     }
     if (!configured || !db) {
@@ -1699,6 +1746,7 @@
         timeStr: fmtJam(now)
       });
       input.value = "";
+      syncGlucoseLabel();
       toast(`Tersimpan: ${v} mg/dL, pukul ${fmtJam(now)}`);
     } catch (err) {
       toast("Gagal menyimpan: " + err.message);
@@ -2800,6 +2848,50 @@
     closeDatePicker();
   };
 
+  // ---------- Nilai gula darah: keypad angka kustom, bukan keyboard bawaan ----------
+  let kpVal = "";
+  function syncGlucoseLabel() {
+    const v = $("glucose").value;
+    $("glucoseBtn").innerHTML = v ? `${esc(v)} <span class="ph">mg/dL</span>` : '<span class="ph">Ketuk untuk isi nilai</span>';
+  }
+  function kpRenderDisplay() {
+    $("kpDisplay").innerHTML = kpVal
+      ? `${esc(kpVal)}<span class="unit">mg/dL</span>`
+      : '<span class="empty">Masukkan nilai&hellip;</span>';
+  }
+  function openKeypad() {
+    kpVal = $("glucose").value || "";
+    kpRenderDisplay();
+    $("kpOverlay").classList.add("show");
+  }
+  const closeKeypad = () => $("kpOverlay").classList.remove("show");
+  $("glucoseBtn").onclick = openKeypad;
+  $("kpCancel").onclick = closeKeypad;
+  $("kpOverlay").onclick = (e) => { if (e.target === $("kpOverlay")) closeKeypad(); };
+  document.addEventListener("keydown", (e) => {
+    if (!$("kpOverlay").classList.contains("show")) return;
+    if (e.key === "Escape") { closeKeypad(); return; }
+    if (e.key >= "0" && e.key <= "9") { kpPress(e.key); return; }
+    if (e.key === "Backspace") { kpVal = kpVal.slice(0, -1); kpRenderDisplay(); return; }
+    if (e.key === "Enter") kpConfirm();
+  });
+  function kpPress(d) {
+    if (kpVal.length >= 3) return; // nilai maksimal 700 → 3 digit
+    kpVal += d;
+    kpRenderDisplay();
+  }
+  document.querySelectorAll("#kpOverlay .kp-grid button[data-k]").forEach((b) => {
+    b.onclick = () => kpPress(b.dataset.k);
+  });
+  $("kpBack").onclick = () => { kpVal = kpVal.slice(0, -1); kpRenderDisplay(); };
+  $("kpClearKey").onclick = () => { kpVal = ""; kpRenderDisplay(); };
+  function kpConfirm() {
+    $("glucose").value = kpVal;
+    syncGlucoseLabel();
+    closeKeypad();
+  }
+  $("kpOk").onclick = kpConfirm;
+
   let profileReturn = null; // layar yang terbuka sebelum masuk ke pengaturan profil
   function openProfile() {
     profileReturn = SCREENS.find((s) => s !== "profileScreen" && $(s).style.display !== "none") || null;
@@ -2902,7 +2994,6 @@
   //  Tombol umum
   // ============================================================
   $("saveBtn").onclick = save;
-  $("glucose").addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
   $("exportBtn").onclick = () =>
     exportPDF(entries, displayNameNow(), currentUser?.email || "", $("exportBtn"));
   $("pExportBtn").onclick = () =>
