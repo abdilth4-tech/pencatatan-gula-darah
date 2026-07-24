@@ -907,6 +907,68 @@
   .field .note { font-size: 0.7rem; color: var(--faint); margin-top: 5px; line-height: 1.5; }
   .field-row { display: flex; gap: 12px; }
   .field-row .field { flex: 1; min-width: 0; }
+
+  /* Tombol pemicu bergaya input (tanggal lahir) */
+  .picker-btn {
+    width: 100%; font-family: inherit; text-align: left;
+    font-size: 0.88rem; font-weight: 500; color: var(--ink);
+    background: var(--card); border: 1.5px solid var(--border-strong);
+    border-radius: 10px; padding: 11px 13px; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .picker-btn:hover, .picker-btn:focus { border-color: var(--ink); outline: none; }
+  .picker-btn .ph { color: var(--faint); font-weight: 400; }
+
+  /* Pilihan segmen (jenis kelamin) */
+  .seg { display: flex; gap: 6px; }
+  .seg button {
+    flex: 1; font-family: inherit;
+    font-size: 0.78rem; font-weight: 600;
+    background: var(--card); color: var(--muted);
+    border: 1.5px solid var(--border-strong); border-radius: 10px;
+    padding: 11px 0; cursor: pointer; transition: all 0.15s;
+  }
+  .seg button:hover { border-color: var(--ink); color: var(--ink); }
+  .seg button.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+  /* Pemilih tanggal kustom (pengganti popup bawaan browser) */
+  .dp-overlay {
+    position: fixed; inset: 0; z-index: 220;
+    background: rgba(10,11,14,0.45);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .dp-overlay.show { display: flex; }
+  .dp-panel {
+    background: var(--card); border-radius: 16px;
+    width: 100%; max-width: 340px; padding: 18px;
+    box-shadow: 0 24px 60px -12px rgba(22,24,29,0.35);
+  }
+  .dp-title {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+    text-align: center; margin-bottom: 12px;
+  }
+  .dp-cols { display: grid; grid-template-columns: 1fr 1.5fr 1.1fr; gap: 8px; }
+  .dp-col {
+    position: relative; height: 190px; overflow-y: auto;
+    overscroll-behavior: contain; scrollbar-width: thin;
+    border: 1px solid var(--border); border-radius: 10px; padding: 4px;
+  }
+  .dp-col div {
+    font-size: 0.82rem; font-weight: 500; color: var(--ink-soft);
+    text-align: center; padding: 7px 2px; border-radius: 7px; cursor: pointer;
+  }
+  .dp-col div:hover { background: var(--bg); }
+  .dp-col div.on { background: var(--ink); color: #fff; font-weight: 600; }
+  .dp-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .dp-actions button {
+    font-family: inherit; font-size: 0.8rem; font-weight: 600;
+    border-radius: 9px; padding: 10px 0; cursor: pointer; transition: opacity 0.15s;
+  }
+  .dp-actions button:hover { opacity: 0.85; }
+  .dp-actions .dp-clear { flex: 1; background: none; border: none; color: var(--muted); }
+  .dp-actions .dp-cancel { flex: 1; background: var(--bg); border: 1px solid var(--border-strong); color: var(--ink); }
+  .dp-actions .dp-ok { flex: 1.3; background: var(--ink); border: none; color: #fff; }
   button.save-profile {
     font-family: inherit;
     width: 100%;
@@ -1235,16 +1297,17 @@
 
       <div class="field-row">
         <div class="field">
-          <label for="pfBirth">Tanggal Lahir</label>
-          <input type="date" id="pfBirth">
+          <label for="pfBirthBtn">Tanggal Lahir</label>
+          <input type="hidden" id="pfBirth">
+          <button type="button" class="picker-btn" id="pfBirthBtn"><span class="ph">Pilih tanggal</span></button>
         </div>
         <div class="field">
-          <label for="pfGender">Jenis Kelamin</label>
-          <select id="pfGender">
-            <option value="">— Pilih —</option>
-            <option value="L">Laki-laki</option>
-            <option value="P">Perempuan</option>
-          </select>
+          <label>Jenis Kelamin</label>
+          <input type="hidden" id="pfGender">
+          <div class="seg" id="pfGenderSeg">
+            <button type="button" data-v="L">Laki-laki</button>
+            <button type="button" data-v="P">Perempuan</button>
+          </div>
         </div>
       </div>
 
@@ -1277,6 +1340,23 @@
 
 <!-- Lightbox foto forum -->
 <div id="lightbox" class="lightbox"><img id="lightboxImg" alt="Foto ukuran penuh"></div>
+
+<!-- Pemilih tanggal lahir (pengganti date picker bawaan browser) -->
+<div id="dpOverlay" class="dp-overlay">
+  <div class="dp-panel">
+    <div class="dp-title">Tanggal Lahir</div>
+    <div class="dp-cols">
+      <div class="dp-col" id="dpDay"></div>
+      <div class="dp-col" id="dpMonth"></div>
+      <div class="dp-col" id="dpYear"></div>
+    </div>
+    <div class="dp-actions">
+      <button type="button" class="dp-clear" id="dpClear">Hapus</button>
+      <button type="button" class="dp-cancel" id="dpCancel">Batal</button>
+      <button type="button" class="dp-ok" id="dpOk">Pilih</button>
+    </div>
+  </div>
+</div>
 
 <!-- Ajakan pasang aplikasi (PWA) -->
 <div id="installSheet" class="install-sheet">
@@ -2632,7 +2712,93 @@
     $("pfBirth").value = p.birthDate || "";
     $("pfGender").value = p.gender || "";
     $("pfAddress").value = p.address || "";
+    syncBirthLabel();
+    syncGenderSeg();
   }
+
+  // ---------- Jenis kelamin: pilihan segmen, tanpa dropdown bawaan ----------
+  function syncGenderSeg() {
+    const v = $("pfGender").value;
+    $("pfGenderSeg").querySelectorAll("button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.v === v));
+  }
+  $("pfGenderSeg").querySelectorAll("button").forEach((b) => {
+    b.onclick = () => {
+      // ketuk pilihan yang sama sekali lagi untuk mengosongkan
+      $("pfGender").value = $("pfGender").value === b.dataset.v ? "" : b.dataset.v;
+      syncGenderSeg();
+    };
+  });
+
+  // ---------- Tanggal lahir: popup pemilih kustom, bukan bawaan browser ----------
+  const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                 "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  let dpD = 1, dpM = 0, dpY = 2000;
+  const daysIn = (y, m) => new Date(y, m + 1, 0).getDate();
+
+  function syncBirthLabel() {
+    const v = $("pfBirth").value;
+    $("pfBirthBtn").innerHTML = v
+      ? esc(fmtTanggalPendek(new Date(v + "T00:00:00")))
+      : '<span class="ph">Pilih tanggal</span>';
+  }
+
+  function dpItem(col, label, on, pick) {
+    const el = document.createElement("div");
+    el.textContent = label;
+    if (on) el.className = "on";
+    el.onclick = pick;
+    col.appendChild(el);
+  }
+
+  function dpRender() {
+    const day = $("dpDay"), mon = $("dpMonth"), yr = $("dpYear");
+    // pertahankan posisi scroll tiap kolom saat dibangun ulang
+    const st = [day.scrollTop, mon.scrollTop, yr.scrollTop];
+    day.innerHTML = ""; mon.innerHTML = ""; yr.innerHTML = "";
+    const n = daysIn(dpY, dpM);
+    if (dpD > n) dpD = n;
+    for (let d = 1; d <= n; d++)
+      dpItem(day, d, d === dpD, () => { dpD = d; dpRender(); });
+    BULAN.forEach((nama, i) =>
+      dpItem(mon, nama, i === dpM, () => { dpM = i; dpRender(); dpScroll("dpDay"); }));
+    const yNow = new Date().getFullYear();
+    for (let y = yNow; y >= 1920; y--)
+      dpItem(yr, y, y === dpY, () => { dpY = y; dpRender(); dpScroll("dpDay"); });
+    day.scrollTop = st[0]; mon.scrollTop = st[1]; yr.scrollTop = st[2];
+  }
+
+  function dpScroll(only) {
+    for (const id of ["dpDay", "dpMonth", "dpYear"]) {
+      if (only && id !== only) continue;
+      const col = $(id), on = col.querySelector(".on");
+      if (on) col.scrollTop = on.offsetTop - (col.clientHeight - on.clientHeight) / 2;
+    }
+  }
+
+  function openDatePicker() {
+    const d = $("pfBirth").value ? new Date($("pfBirth").value + "T00:00:00") : null;
+    if (d && !isNaN(d)) { dpY = d.getFullYear(); dpM = d.getMonth(); dpD = d.getDate(); }
+    else { dpY = 2000; dpM = 0; dpD = 1; }
+    dpRender();
+    $("dpOverlay").classList.add("show");
+    dpScroll();
+  }
+  const closeDatePicker = () => $("dpOverlay").classList.remove("show");
+  $("pfBirthBtn").onclick = openDatePicker;
+  $("dpCancel").onclick = closeDatePicker;
+  $("dpOverlay").onclick = (e) => { if (e.target === $("dpOverlay")) closeDatePicker(); };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDatePicker(); });
+  $("dpClear").onclick = () => {
+    $("pfBirth").value = "";
+    syncBirthLabel();
+    closeDatePicker();
+  };
+  $("dpOk").onclick = () => {
+    $("pfBirth").value = `${dpY}-${String(dpM + 1).padStart(2, "0")}-${String(dpD).padStart(2, "0")}`;
+    syncBirthLabel();
+    closeDatePicker();
+  };
 
   let profileReturn = null; // layar yang terbuka sebelum masuk ke pengaturan profil
   function openProfile() {
